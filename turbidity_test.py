@@ -14,7 +14,7 @@ ads = ADS.ADS1115(i2c)
 ads.gain = 1
 
 # 3. 탁도 센서 신호선(파란선)이 연결된 A0 핀 지정
-analog_channel = AnalogIn(ads, ADS.P0)
+chan = AnalogIn(ads, ADS.P0)
 
 print("=========================================")
 print("    [야매 세팅] 탁도 센서 무납땜 5분 컷 테스트    ")
