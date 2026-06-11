@@ -15,7 +15,7 @@ ads.gain = 1
 # 3. 탁도 센서 신호선(파란선)이 연결된 A0 핀 지정
 # ADS.P0 대신 핀 번호를 직접 지정하는 방식으로 수정
 from adafruit_ads1x15.analog_in import AnalogIn
-chan = AnalogIn(ads, ADS.P0)
+chan = AnalogIn(ads, 0)
 
 print("=========================================")
 print("    [야매 세팅] 탁도 센서 무납땜 5분 컷 테스트    ")
