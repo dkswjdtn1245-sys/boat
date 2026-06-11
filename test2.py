@@ -1,18 +1,15 @@
 import time
 import board
 import busio
-import adafruit_ads1x15.ads1115 as ADS
+from adafruit_ads1x15.ads1115 import ADS1115
 from adafruit_ads1x15.analog_in import AnalogIn
 
-# 1. I2C 버스 및 ADS1115 초기화
 i2c = busio.I2C(board.SCL, board.SDA)
-ads = ADS.ADS1115(i2c)
-
-# 2. 게인 설정 (전압 범위)
+ads = ADS1115(i2c) # ADS.ADS1115(i2c) 대신 이것으로 변경
 ads.gain = 2/3
 
-# 3. A1 핀에 연결된 TDS 센서 설정
-tds_sensor = AnalogIn(ads, ADS.P1)
+# 채널 접근을 아래와 같이 다시 시도해 봐!
+tds_sensor = AnalogIn(ads, 1) # P1 대신 숫자 1을 넣으면 대부분의 버전에서 다 해결됨
 
 def get_tds_value(analog_in):
     # 3.3V 구동으로 인한 신호 감소 보정 (이 계수는 실험하며 조절 가능)
