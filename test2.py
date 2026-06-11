@@ -4,26 +4,31 @@ import busio
 import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 
-# I2C 버스 및 ADS1115 초기화
+# 1. I2C 버스 초기화
 i2c = busio.I2C(board.SCL, board.SDA)
+
+# 2. ADS1115 객체 생성
 ads = ADS.ADS1115(i2c)
+
+# 3. 게인(Gain) 설정 (3.3V 전원 환경에 맞춤)
 ads.gain = 1
 
-# ADS.P0 대신 숫자 0, 1, 2, 3을 직접 대입합니다.
-ch0 = AnalogIn(ads, 0)
-ch1 = AnalogIn(ads, 1)
-ch2 = AnalogIn(ads, 2)
-ch3 = AnalogIn(ads, 3)
+# 4. 아날로그 입력 채널 설정 (A0 핀을 숫자 0으로 직접 지정)
+chan = AnalogIn(ads, 0)
 
-print("====================================================")
-print("  ADS1115 전체 채널 스캔 시작 (GND를 찔러보세요!)  ")
-print("====================================================")
+print("==========================================")
+print("  TDS 센서 전압 측정 시작 (종료: Ctrl+C)  ")
+print("==========================================")
 
 try:
     while True:
-        # 네 채널의 전압 실시간 출력
-        print(f"[A0]: {ch0.voltage:.3f}V  |  [A1]: {ch1.voltage:.3f}V  |  [A2]: {ch2.voltage:.3f}V  |  [A3]: {ch3.voltage:.3f}V")
-        time.sleep(0.5)
+        # 실제 변환된 전압 값 (V) 읽기
+        voltage = chan.voltage
+        
+        print(f"현재 TDS 센서 출력 전압: {voltage:.3f} V")
+        
+        # 1초 간격으로 반복 측정
+        time.sleep(1)
 
 except KeyboardInterrupt:
-    print("\n종료되었습니다.")
+    print("\n사용자에 의해 측정이 종료되었습니다.")
