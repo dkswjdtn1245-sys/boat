@@ -5,6 +5,8 @@ import time
 ser = serial.Serial("/dev/serial0", 115200, timeout=1)
 
 def read_tfluna_uart():
+    ser.reset_input_buffer()
+    
     while True:
         try:
             # 1. 첫 번째 헤더 0x59가 나올 때까지 1바이트씩 계속 읽으며 전진
