@@ -2,7 +2,7 @@ import serial
 import time
 
 # [설정] 내 라즈베리파이에 인식된 USB 포트명과 속도 기입
-SERIAL_PORT = '/dev/ttyACM*'  # 만약 위에서 ttyACM0로 나왔다면 수정해줘
+SERIAL_PORT = '/dev/ttyACM0'  # 만약 위에서 ttyACM0로 나왔다면 수정해줘
 BAUD_RATE = 9600
 
 try:
