@@ -136,11 +136,14 @@ def run_state_and_read_sensors(state_name, pwm_val, duration):
 # 8. 메인 테스트 무한 루프
 try:
     print("\n🚀 본격적인 통합 테스트 사이클을 시작합니다! (종료하려면 Ctrl+C)")
+    # 기존 코드: run_state_and_read_sensors("앞으로 전진", 1790, 3)
+
+# 🔥 수정할 부분: 값을 1850(또는 1900)과 1650으로 확 벌려줍니다.
     while True:
         run_state_and_read_sensors("정지 대기", 1750, 3)
-        run_state_and_read_sensors("앞으로 전진", 1790, 3)
+        run_state_and_read_sensors("앞으로 전진", 1850, 3)  # 1790 -> 1850 으로 변경
         run_state_and_read_sensors("모터 멈춤", 1750, 3)
-        run_state_and_read_sensors("뒤로 후진", 1730, 3)
+        run_state_and_read_sensors("뒤로 후진", 1650, 3)  # 1730 -> 1650 으로 변경
 
 except KeyboardInterrupt:
     print("\n🛑 테스트 강제 종료됨. 모터를 중립(정지)으로 복귀시킵니다.")
