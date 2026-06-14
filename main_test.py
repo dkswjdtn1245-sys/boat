@@ -9,7 +9,7 @@ import socket
 # ==========================================
 # 📡 1. 랩뷰 UDP 통신 세팅
 # ==========================================
-UDP_IP = "172.22.2.33"  # 👉 알려주신 IP로 완벽 세팅!
+UDP_IP = "10.242.92.169"  # 👉 알려주신 IP로 완벽 세팅!
 UDP_PORT = 8080
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
