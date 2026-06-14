@@ -91,24 +91,45 @@ def read_temp():
     return -1
 
 # --- 테스트 사이클 제어 함수 ---
+# --- 테스트 사이클 제어 함수 ---
 def run_state_and_read_sensors(state_name, pwm_val, duration):
-    """지정된 시간 동안 모터를 돌리면서 센서값을 실시간 출력"""
+    """지정된 시간 동안 모터를 돌리면서 센서값을 개별적으로 실시간 출력"""
     print(f"\n▶▶ [모터 상태: {state_name} | PWM: {pwm_val}us] ◀◀")
     set_motor(pwm_val, pwm_val)
     
     start_time = time.time()
     while time.time() - start_time < duration:
+        # 1. 수온 센서 독립 읽기
         try:
             temp = read_temp()
-            # ADS1115 연결 성공 시에만 읽도록 안전장치 추가
+        except:
+            temp = -1.0
+            
+        # 2. 탁도 & TDS 센서 독립 읽기
+        try:
             turb_v = turb_sensor.voltage if 'turb_sensor' in globals() else 0.0
             tds_v = tds_sensor.voltage if 'tds_sensor' in globals() else 0.0
-            dist = read_tfluna()
-            heading, roll, pitch = bno.euler
+        except:
+            turb_v, tds_v = 0.0, 0.0
             
-            print(f"🌡️수온: {temp:.1f}°C | 💧탁도: {turb_v:.2f}V | 🧂TDS: {tds_v:.2f}V | 📏거리: {dist}cm | 🧭방향: {heading}")
-        except Exception as e:
-            print("데이터 읽기 일시 지연:", e)
+        # 3. 레이저 센서 독립 읽기
+        try:
+            dist = read_tfluna()
+        except:
+            dist = -1
+            
+        # 4. 자이로 센서 독립 읽기 (BNO055는 None 값이 자주 나오므로 안전장치 필수)
+        heading = 0.0
+        try:
+            if 'bno' in globals():
+                euler = bno.euler
+                if euler and euler[0] is not None:
+                    heading = euler[0]
+        except:
+            pass
+        
+        # 🔥 어떤 센서가 에러나든 멈추지 않고 무조건 화면에 텍스트를 쏩니다!
+        print(f"🌡️수온: {temp:.1f}°C | 💧탁도: {turb_v:.2f}V | 🧂TDS: {tds_v:.2f}V | 📏거리: {dist}cm | 🧭방향: {heading}")
         
         time.sleep(0.5)
 
