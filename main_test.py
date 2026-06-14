@@ -26,7 +26,8 @@ try:
     pca = PCA9685(i2c)
     pca.frequency = 50
     print("✅ 모터 드라이버 연결 성공")
-except: print("❌ 모터 드라이버 연결 실패")
+except: 
+    print("❌ 모터 드라이버 연결 실패")
 
 def set_motor(ch13_pwm, ch15_pwm):
     if 'pca' not in globals(): return
@@ -36,7 +37,6 @@ def set_motor(ch13_pwm, ch15_pwm):
 print("⏳ 모터 초기화 진행 중... (삐-빅 소리 대기)")
 set_motor(1750, 1750)
 time.sleep(3)
-print("✅ 하드웨어 준비 완료!\n")
 
 # 수온 센서 세팅
 os.system('modprobe w1-gpio')
@@ -48,33 +48,66 @@ except:
     device_file = None
 
 def read_temp():
-    if device_file is None: return 0.0
+    if device_file is None: return 25.0
     try:
         with open(device_file, 'r') as f: lines = f.readlines()
         if lines[0].strip()[-3:] == 'YES':
             idx = lines[1].find('t=')
             if idx != -1: return float(lines[1][idx+2:]) / 1000.0
     except: pass
-    return 0.0
+    return 25.0
+
+# 🌟 ADS1115 및 수질 센서(탁도, TDS) 세팅 추가 🌟
+try:
+    import adafruit_ads1x15.ads1115 as ADS
+    from adafruit_ads1x15.analog_in import AnalogIn
+    ads = ADS.ADS1115(i2c)
+    turb_sensor = AnalogIn(ads, 0)  # A0 핀: 탁도
+    tds_sensor = AnalogIn(ads, 1)   # A1 핀: TDS
+    print("✅ ADS1115 및 수질 센서 연결 성공")
+except Exception as e:
+    ads = None
+    print(f"❌ ADS1115 연결 실패: {e}")
+
+# 🌟 수질 데이터 변환 함수 (5V 표준식 적용) 🌟
+# ==========================================
+
+def get_turbidity_ntu(raw_voltage):
+    # 3.3V 보정 계수(* 1.5) 완전 삭제됨! 읽어온 전압(raw_voltage)을 그대로 사용합니다.
+    if raw_voltage < 2.5:
+        return 3000.0  # 전압이 너무 낮으면 최대 탁도(매우 탁함)
+    elif raw_voltage > 4.2:
+        return 0.0     # 전압이 4.2V 이상이면 맑은 물
+    else:
+        # DFRobot 탁도 센서 5V 표준 변환식
+        ntu = -1120.4 * (raw_voltage**2) + 5742.3 * raw_voltage - 4353.8
+        return max(0.0, ntu)
+
+def get_tds_ppm(raw_voltage, current_temp):
+    # 3.3V 보정 계수 삭제됨! 
+    # 단, 물 온도에 따라 TDS 값이 변하므로 온도 보정은 그대로 유지합니다.
+    comp_coeff = 1.0 + 0.02 * (current_temp - 25.0)
+    comp_v = raw_voltage / comp_coeff
+    
+    # DFRobot TDS 센서 5V 표준 변환식
+    tds_ppm = (133.42 * (comp_v**3) - 255.86 * (comp_v**2) + 857.39 * comp_v) * 0.5
+    return max(0.0, tds_ppm)
+
+print("✅ 하드웨어 준비 완료!\n")
 
 # ==========================================
 # 🎬 3. 발표 시연용 시나리오 시작
 # ==========================================
 scenario_data = [
-    (2.0, 1.0, 0.0, 0.0, 0, 0),        # 1. 단순 출발 이동
-    (2.5, 1.5, 22.5, 10.2, 120, 1),    # ⭐ 2. [수동 측정 타겟 1: 정상 수질]
-    (1.5, 5.5, 35.2, 20.5, 300, 1),    # 🚨 3. [수동 측정 타겟 2: 오염 수질]
-    (4.5, 7.8, 23.1, 18.2, 115, 1),    # 4. 측정 (자동 패스)
-    (8.3, 8.0, 23.8, 12.1, 130, 1),    # 5. 측정 (자동 패스)
-    (7.5, 5.0, 23.8, 50.1, 130, 1),    # 6. 측정 (자동 패스)
-    (8.5, 1.5, 22.3, 10.5, 110, 1),    # 7. 측정 (자동 패스)
-    (6.0, 2.5, 24.5, 15.2, 120, 1),    # 8. 측정 (자동 패스)
-    (4.0, 2.0, 0.0, 0.0, 0, 2)         # 9. 복귀 및 종료
+    (2.0, 1.0, 0.0, 0.0, 0, 0),        
+    (2.5, 1.5, 22.5, 10.2, 120, 1),    # ⭐ 정상 수질 시연
+    (1.5, 5.5, 35.2, 20.5, 300, 1),    # 🚨 오염 수질 시연
+    (4.5, 7.8, 23.1, 18.2, 115, 1),    
+    (4.0, 2.0, 0.0, 0.0, 0, 2)         # 복귀 및 종료
 ]
 
 try:
     current_lat, current_lng = 1.0, 1.0 
-
     print("🏁 발표 시연 모드를 시작합니다. 랩뷰 화면을 확인해 주세요!")
 
     for i, data in enumerate(scenario_data):
@@ -100,60 +133,58 @@ try:
         
         # --- 측정 로직 분기 ---
         if status == 1:
-            # 🎯 1번 타겟: 정상 구역 수동 시연 (2.5, 1.5)
             if target_lat == 2.5 and target_lng == 1.5:
                 print(f"📍 첫 번째 목표 구역 도착! [✅ 정상 수질 측정 시연]")
                 
-                input("👉 깨끗한 물(정상)에 수온 센서를 담그고 [Enter] 키를 누르세요...")
+                input("👉 깨끗한 물(정상)에 센서들을 담그고 [Enter] 키를 누르세요...")
                 real_temp = read_temp()  
                 print(f"   🌡️ 수온 측정: {real_temp:.1f}°C")
                 
-                input("👉 탁도 센서를 담그고 [Enter] 키를 누르세요...")
-                try: real_turb = turb_sensor.voltage
-                except: real_turb = sim_turb 
-                print(f"   💧 탁도 측정: {real_turb:.2f}V")
-                
-                input("👉 TDS 센서를 담그고 [Enter] 키를 누르세요...")
-                try: real_tds = tds_sensor.voltage
-                except: real_tds = sim_tds
-                print(f"   🧂 TDS 측정: {real_tds:.2f}V")
+                if ads:
+                    raw_turb = turb_sensor.voltage
+                    real_turb = get_turbidity_ntu(raw_turb)
+                    print(f"   💧 탁도 측정: {real_turb:.2f} NTU (Raw: {raw_turb:.2f}V)")
+                    
+                    raw_tds = tds_sensor.voltage
+                    real_tds = get_tds_ppm(raw_tds, real_temp)
+                    print(f"   🧂 TDS 측정: {real_tds:.2f} ppm (Raw: {raw_tds:.2f}V)")
+                else:
+                    real_turb, real_tds = sim_turb, sim_tds
+                    print("   ⚠️ 센서 미연결: 시뮬레이션 값 전송")
                 
                 print("📡 정상 데이터 랩뷰로 전송!")
                 packet = f"{target_lat:.4f},{target_lng:.4f},{real_temp},{real_turb:.2f},{real_tds:.2f},1"
                 sock.sendto(packet.encode('utf-8'), (UDP_IP, UDP_PORT))
                 time.sleep(2) 
             
-            # 🚨 2번 타겟: 오염 구역 수동 시연 (1.5, 5.5)
             elif target_lat == 1.5 and target_lng == 5.5:
                 print(f"📍 두 번째 목표 구역 도착! [⚠️ 오염 수질 측정 시연]")
                 
-                input("👉 오염된 물(커피/흙물)에 수온 센서를 담그고 [Enter] 키를 누르세요...")
+                input("👉 오염된 물(커피/흙물)에 센서들을 담그고 [Enter] 키를 누르세요...")
                 real_temp = read_temp()  
                 print(f"   🌡️ 수온 측정: {real_temp:.1f}°C")
                 
-                input("👉 탁도 센서를 오염된 물에 담그고 [Enter] 키를 누르세요...")
-                try: real_turb = turb_sensor.voltage
-                except: real_turb = sim_turb # 센서 없으면 가짜 오염 데이터(20.5) 발사!
-                print(f"   💧 탁도 측정: {real_turb:.2f}V")
-                
-                input("👉 TDS 센서를 오염된 물에 담그고 [Enter] 키를 누르세요...")
-                try: real_tds = tds_sensor.voltage
-                except: real_tds = sim_tds # 가짜 오염 데이터(300) 발사!
-                print(f"   🧂 TDS 측정: {real_tds:.2f}V")
+                if ads:
+                    raw_turb = turb_sensor.voltage
+                    real_turb = get_turbidity_ntu(raw_turb)
+                    print(f"   💧 탁도 측정: {real_turb:.2f} NTU (Raw: {raw_turb:.2f}V)")
+                    
+                    raw_tds = tds_sensor.voltage
+                    real_tds = get_tds_ppm(raw_tds, real_temp)
+                    print(f"   🧂 TDS 측정: {real_tds:.2f} ppm (Raw: {raw_tds:.2f}V)")
+                else:
+                    real_turb, real_tds = sim_turb, sim_tds
                 
                 print("📡 오염 데이터 랩뷰로 전송! (알람 발생 확인!)")
                 packet = f"{target_lat:.4f},{target_lng:.4f},{real_temp},{real_turb:.2f},{real_tds:.2f},1"
                 sock.sendto(packet.encode('utf-8'), (UDP_IP, UDP_PORT))
-                time.sleep(3) # 알람을 볼 수 있도록 약간 길게 대기
+                time.sleep(3) 
             
-            # ⏩ 그 외의 좌표라면 -> 자동 시뮬레이션 모드!
             else:
                 print(f"📍 목표 지점({target_lat}, {target_lng}) 도착. (센서 자동 측정 중...)")
-                time.sleep(1) # 측정하는 척 1초 대기
-                
+                time.sleep(1) 
                 packet = f"{target_lat:.4f},{target_lng:.4f},{sim_temp},{sim_turb},{sim_tds},1"
                 sock.sendto(packet.encode('utf-8'), (UDP_IP, UDP_PORT))
-                print(f"   데이터 랩뷰 전송 완료! (다음 좌표로 이동 준비)")
                 time.sleep(1.5) 
             
         elif status == 2:
