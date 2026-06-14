@@ -23,10 +23,10 @@ try:
 except Exception as e:
     print("❌ 자이로 센서 연결 실패:", e)
 
-# 4. ADS1115 (탁도 A0, TDS A1) 세팅 - 🔥 에러 수정 완료!
+# 4. ADS1115 (탁도 A0, TDS A1) 세팅
 try:
     ads = ADS.ADS1115(i2c)
-    # ADS.P0 대신 직관적인 숫자 0(A0핀), 1(A1핀)을 직접 넣어 버그를 우회합니다.
+    # A0, A1 핀 명시적 할당 (에러 우회)
     turb_sensor = AnalogIn(ads, 0)  # 탁도 센서 (A0)
     tds_sensor = AnalogIn(ads, 1)   # TDS 센서 (A1)
     print("✅ ADS1115 (탁도/TDS) 연결 성공")
@@ -53,11 +53,16 @@ except IndexError:
     print("❌ 수온 센서(DS18B20)를 찾을 수 없습니다. (배선/풀업저항 확인)")
 
 # 7. 모터 드라이버 (PCA9685) 세팅
-pca = PCA9685(i2c)
-pca.frequency = 50 # ESC 제어를 위한 50Hz 세팅
+try:
+    pca = PCA9685(i2c)
+    pca.frequency = 50 # ESC 제어를 위한 50Hz 세팅
+    print("✅ 모터 드라이버 연결 성공")
+except Exception as e:
+    print("❌ 모터 드라이버 연결 실패:", e)
 
 def set_motor(ch13_pwm, ch15_pwm):
     """주어진 PWM(us) 값으로 모터를 제어하는 함수"""
+    if 'pca' not in globals(): return
     duty_13 = int((ch13_pwm / 20000) * 65535)
     duty_15 = int((ch15_pwm / 20000) * 65535)
     pca.channels[13].duty_cycle = duty_13
@@ -71,6 +76,8 @@ print("✅ 모터 초기화 완료!")
 
 # --- 데이터 읽기 보조 함수들 ---
 def read_tfluna():
+    if 'ser' not in globals() or not ser.is_open: return -1
+    # 🔥 레이저 센서 딜레이 해결의 핵심: 읽기 전 버퍼 비우기
     ser.reset_input_buffer()
     timeout = time.time() + 0.5
     while time.time() < timeout:
@@ -82,15 +89,17 @@ def read_tfluna():
 
 def read_temp():
     if device_file is None: return -1
-    with open(device_file, 'r') as f:
-        lines = f.readlines()
-    if lines[0].strip()[-3:] == 'YES':
-        equals_pos = lines[1].find('t=')
-        if equals_pos != -1:
-            return float(lines[1][equals_pos+2:]) / 1000.0
+    try:
+        with open(device_file, 'r') as f:
+            lines = f.readlines()
+        if lines[0].strip()[-3:] == 'YES':
+            equals_pos = lines[1].find('t=')
+            if equals_pos != -1:
+                return float(lines[1][equals_pos+2:]) / 1000.0
+    except:
+        pass
     return -1
 
-# --- 테스트 사이클 제어 함수 ---
 # --- 테스트 사이클 제어 함수 ---
 def run_state_and_read_sensors(state_name, pwm_val, duration):
     """지정된 시간 동안 모터를 돌리면서 센서값을 개별적으로 실시간 출력"""
@@ -100,10 +109,7 @@ def run_state_and_read_sensors(state_name, pwm_val, duration):
     start_time = time.time()
     while time.time() - start_time < duration:
         # 1. 수온 센서 독립 읽기
-        try:
-            temp = read_temp()
-        except:
-            temp = -1.0
+        temp = read_temp()
             
         # 2. 탁도 & TDS 센서 독립 읽기
         try:
@@ -113,12 +119,9 @@ def run_state_and_read_sensors(state_name, pwm_val, duration):
             turb_v, tds_v = 0.0, 0.0
             
         # 3. 레이저 센서 독립 읽기
-        try:
-            dist = read_tfluna()
-        except:
-            dist = -1
+        dist = read_tfluna()
             
-        # 4. 자이로 센서 독립 읽기 (BNO055는 None 값이 자주 나오므로 안전장치 필수)
+        # 4. 자이로 센서 독립 읽기
         heading = 0.0
         try:
             if 'bno' in globals():
@@ -128,22 +131,18 @@ def run_state_and_read_sensors(state_name, pwm_val, duration):
         except:
             pass
         
-        # 🔥 어떤 센서가 에러나든 멈추지 않고 무조건 화면에 텍스트를 쏩니다!
+        # 실시간 데이터 출력
         print(f"🌡️수온: {temp:.1f}°C | 💧탁도: {turb_v:.2f}V | 🧂TDS: {tds_v:.2f}V | 📏거리: {dist}cm | 🧭방향: {heading}")
-        
         time.sleep(0.5)
 
 # 8. 메인 테스트 무한 루프
 try:
     print("\n🚀 본격적인 통합 테스트 사이클을 시작합니다! (종료하려면 Ctrl+C)")
-    # 기존 코드: run_state_and_read_sensors("앞으로 전진", 1790, 3)
-
-# 🔥 수정할 부분: 값을 1850(또는 1900)과 1650으로 확 벌려줍니다.
     while True:
         run_state_and_read_sensors("정지 대기", 1750, 3)
-        run_state_and_read_sensors("앞으로 전진", 1850, 3)  # 1790 -> 1850 으로 변경
+        run_state_and_read_sensors("앞으로 전진", 1850, 3)  # 🔥 수정 완료: 1850us 반영
         run_state_and_read_sensors("모터 멈춤", 1750, 3)
-        run_state_and_read_sensors("뒤로 후진", 1650, 3)  # 1730 -> 1650 으로 변경
+        run_state_and_read_sensors("뒤로 후진", 1650, 3)  # 🔥 수정 완료: 1650us 반영
 
 except KeyboardInterrupt:
     print("\n🛑 테스트 강제 종료됨. 모터를 중립(정지)으로 복귀시킵니다.")
