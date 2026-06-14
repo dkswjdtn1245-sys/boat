@@ -13,23 +13,22 @@ except Exception as e:
     exit()
 
 # 2. 데이터 읽기 함수 (버퍼 찌꺼기 완벽 처리)
+# --- 수정된 강력한 데이터 읽기 함수 ---
 def read_tfluna():
-    # 데이터가 9바이트(한 패킷 길이) 이상 쌓여있을 때만 읽기 시작
-    while ser.in_waiting >= 9:
-        # 첫 번째 헤더 'Y' (0x59) 찾기
-        if ser.read(1) == b'Y':
-            # 두 번째 헤더 'Y' (0x59) 찾기
-            if ser.read(1) == b'Y':
-                # 나머지 7바이트 데이터 읽기
-                data = ser.read(7)
-                if len(data) == 7:
-                    distance = data[0] + (data[1] << 8)      # 거리 (cm)
-                    strength = data[2] + (data[3] << 8)      # 신호 강도
-                    temperature = (data[4] + (data[5] << 8)) / 8.0 - 256.0 # 센서 내부 온도
-                    
-                    return distance, strength, temperature
+    ser.reset_input_buffer() # 찌꺼기 싹 비우기
+    time.sleep(0.02)         # 센서가 새 데이터 9바이트를 쏠 때까지 잠깐 대기
+    
+    if ser.in_waiting >= 9:
+        data = ser.read(9)   # 1바이트씩 찔끔 읽지 말고, 9바이트를 한 번에 캡처!
+        
+        # 첫 번째와 두 번째 데이터가 'Y'(0x59) 인지 확인해서 줄이 맞는지 체크
+        if data[0] == 0x59 and data[1] == 0x59: 
+            distance = data[2] + (data[3] << 8)
+            strength = data[4] + (data[5] << 8)
+            temperature = (data[6] + (data[7] << 8)) / 8.0 - 256.0
+            return distance, strength, temperature
+            
     return -1, -1, -1
-
 # 3. 메인 무한 루프
 try:
     print("🎯 거리 측정을 시작합니다. 센서 앞에 손을 흔들어보세요! (종료: Ctrl+C)")
