@@ -70,27 +70,33 @@ except Exception as e:
     print(f"❌ ADS1115 연결 실패: {e}")
 
 # 🌟 수질 데이터 변환 함수 (5V 표준식 적용)
+# 🌟 수질 데이터 변환 함수 (실측 보정 완료)
+
 def get_turbidity_ntu(raw_voltage):
-    # 맑은 물에서의 Raw 전압이 4.10V라면, 이 값을 기준으로 보정합니다.
-    # 4.1V 이상이면 깨끗한 물(0 NTU)로 간주하도록 오프셋을 줍니다.
-    if raw_voltage >= 4.10:
+    # [보정] 노이즈 억제 및 시연용 데드존 설정 (4.05V 이상은 무조건 맑은 물)
+    if raw_voltage >= 4.05:
         return 0.0
-    else:
-        # 기존 5V 표준식에서 4.1V를 기점으로 역산하도록 수정
-        # 4.1V 미만으로 떨어질 때만 탁도가 올라가는 구조로 변환
-        ntu = -1120.4 * (raw_voltage**2) + 5742.3 * raw_voltage - 4353.8
-        return max(0.0, ntu)
+    
+    # [보정] 맑은 물 기준 4.10V를 공식의 영점(4.25V)에 맞추기 위한 오프셋(+0.15V) 추가
+    comp_voltage = raw_voltage + 0.15
+    
+    # 2차 방정식 변환식 적용
+    ntu = -1120.4 * (comp_voltage**2) + 5742.3 * comp_voltage - 4353.8
+    return max(0.0, ntu)
+
 
 def get_tds_ppm(raw_voltage, current_temp):
-    # TDS는 전압이 낮을수록 깨끗한 물인 경우가 많습니다. 
-    # 현재 측정된 0.34V를 '0 ppm'으로 잡는 오프셋 보정입니다.
-    base_v = 0.34 
-    comp_v = max(0.0, raw_voltage - base_v) # 0.34V를 빼서 0으로 만듦
+    # [보정] 맑은 물 실측값 0.41V를 '0 ppm'으로 만들기 위한 영점(Base) 조절
+    base_v = 0.41 
     
+    # 기준 전압보다 측정 전압이 낮으면 0 이하로 내려가지 않도록 차단
+    comp_v = max(0.0, raw_voltage - base_v) 
+    
+    # 수온에 따른 전도도 변화 보정
     comp_coeff = 1.0 + 0.02 * (current_temp - 25.0)
     comp_v = comp_v / comp_coeff
     
-    # 변환식 적용
+    # TDS 변환식 적용
     tds_ppm = (133.42 * (comp_v**3) - 255.86 * (comp_v**2) + 857.39 * comp_v) * 0.5
     return max(0.0, tds_ppm)
 print("✅ 하드웨어 준비 완료!\n")
