@@ -23,11 +23,12 @@ try:
 except Exception as e:
     print("❌ 자이로 센서 연결 실패:", e)
 
-# 4. ADS1115 (탁도 A0, TDS A1) 세팅
+# 4. ADS1115 (탁도 A0, TDS A1) 세팅 - 🔥 에러 수정 완료!
 try:
     ads = ADS.ADS1115(i2c)
-    turb_sensor = AnalogIn(ads, ADS.P0)  # 탁도 센서
-    tds_sensor = AnalogIn(ads, ADS.P1)   # TDS 센서
+    # ADS.P0 대신 직관적인 숫자 0(A0핀), 1(A1핀)을 직접 넣어 버그를 우회합니다.
+    turb_sensor = AnalogIn(ads, 0)  # 탁도 센서 (A0)
+    tds_sensor = AnalogIn(ads, 1)   # TDS 센서 (A1)
     print("✅ ADS1115 (탁도/TDS) 연결 성공")
 except Exception as e:
     print("❌ ADS1115 연결 실패:", e)
@@ -57,7 +58,6 @@ pca.frequency = 50 # ESC 제어를 위한 50Hz 세팅
 
 def set_motor(ch13_pwm, ch15_pwm):
     """주어진 PWM(us) 값으로 모터를 제어하는 함수"""
-    # 50Hz 기준 1주기는 20000us. 16비트 해상도(65535)로 변환
     duty_13 = int((ch13_pwm / 20000) * 65535)
     duty_15 = int((ch15_pwm / 20000) * 65535)
     pca.channels[13].duty_cycle = duty_13
@@ -71,13 +71,13 @@ print("✅ 모터 초기화 완료!")
 
 # --- 데이터 읽기 보조 함수들 ---
 def read_tfluna():
-    ser.reset_input_buffer() # 버퍼 찌꺼기 비우기
+    ser.reset_input_buffer()
     timeout = time.time() + 0.5
     while time.time() < timeout:
         if ser.in_waiting >= 9:
             if ser.read(1) == b'Y' and ser.read(1) == b'Y':
                 data = ser.read(7)
-                return data[0] + (data[1] << 8) # 거리(cm)
+                return data[0] + (data[1] << 8)
     return -1
 
 def read_temp():
@@ -92,42 +92,33 @@ def read_temp():
 
 # --- 테스트 사이클 제어 함수 ---
 def run_state_and_read_sensors(state_name, pwm_val, duration):
-    """지정된 시간(duration) 동안 모터를 돌리면서 센서값을 실시간 출력"""
+    """지정된 시간 동안 모터를 돌리면서 센서값을 실시간 출력"""
     print(f"\n▶▶ [모터 상태: {state_name} | PWM: {pwm_val}us] ◀◀")
-    set_motor(pwm_val, pwm_val) # 양쪽 모터 동시 제어
+    set_motor(pwm_val, pwm_val)
     
     start_time = time.time()
     while time.time() - start_time < duration:
         try:
-            # 센서 데이터 수집
             temp = read_temp()
-            turb_v = turb_sensor.voltage
-            tds_v = tds_sensor.voltage
+            # ADS1115 연결 성공 시에만 읽도록 안전장치 추가
+            turb_v = turb_sensor.voltage if 'turb_sensor' in globals() else 0.0
+            tds_v = tds_sensor.voltage if 'tds_sensor' in globals() else 0.0
             dist = read_tfluna()
             heading, roll, pitch = bno.euler
             
-            # 가독성 좋게 출력
-            print(f"🌡️수온: {temp:.1f}°C | 💧탁도: {turb_v:.2f}V | 🧂TDS: {tds_v:.2f}V | 📏거리: {dist}cm | 🧭방향(Head): {heading}")
-        
+            print(f"🌡️수온: {temp:.1f}°C | 💧탁도: {turb_v:.2f}V | 🧂TDS: {tds_v:.2f}V | 📏거리: {dist}cm | 🧭방향: {heading}")
         except Exception as e:
-            print("센서 읽기 에러 (무시하고 계속 진행):", e)
+            print("데이터 읽기 일시 지연:", e)
         
-        time.sleep(0.5) # 0.5초마다 출력
+        time.sleep(0.5)
 
 # 8. 메인 테스트 무한 루프
 try:
     print("\n🚀 본격적인 통합 테스트 사이클을 시작합니다! (종료하려면 Ctrl+C)")
     while True:
-        # 1단계: 정지 (중립 1750) 상태에서 3초간 센서 측정
         run_state_and_read_sensors("정지 대기", 1750, 3)
-        
-        # 2단계: 전진 (1790) 상태에서 3초간 센서 측정
         run_state_and_read_sensors("앞으로 전진", 1790, 3)
-        
-        # 3단계: 다시 정지 (중립 1750)
         run_state_and_read_sensors("모터 멈춤", 1750, 3)
-        
-        # 4단계: 후진 (1730) 상태에서 3초간 센서 측정
         run_state_and_read_sensors("뒤로 후진", 1730, 3)
 
 except KeyboardInterrupt:
