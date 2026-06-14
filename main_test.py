@@ -107,7 +107,7 @@ scenario_data = [
 ]
 
 try:
-    current_lat, current_lng = 1.0, 1.0 
+    current_lat, current_lng = 2.0, 1.0 
     print("🏁 발표 시연 모드를 시작합니다. 랩뷰 화면을 확인해 주세요!")
 
     for i, data in enumerate(scenario_data):
